@@ -48,11 +48,15 @@ export async function analyzeImageMeasurements(
     ${JSON.stringify(lines.filter(l => l.type !== 'Reference (Known)'))}
 
     OBJECTIVE:
-    1. Estimate the 3D depth and perspective of the image.
-    2. Use the Green Reference Line (${referenceLine.realLength} units) to establish scale.
-    3. Calculate the physical length of each target line, adjusting for perspective and depth (parallax/foreshortening).
-    4. Provide a reasoning for each calculation (e.g. "Estimated 15% foreshortening due to 30-degree tilt").
-    5. Return a JSON summary.
+    1. Estimate the 3D depth, focal length, and perspective of the image.
+    2. Use the Green Reference Line (${referenceLine.realLength} units) to establish a baseline physical scale.
+    3. Calculate the physical length of each target line.
+    4. MUST account for:
+       - Foreshortening: Lines pointing towards or away from the camera.
+       - Parallax/Depth: The distance relative to the camera compared to the reference.
+       - Perspective Distortion: Objects becoming smaller in the distance.
+    5. Provide a 'reasoning' for each calculation (e.g. "Adjusted +12% for predicted Z-depth inclination").
+    6. Provide a 'confidence' score (0-100) based on the image clarity and perspective geometry.
   `;
 
   try {

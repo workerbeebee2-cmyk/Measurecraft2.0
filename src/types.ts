@@ -11,10 +11,18 @@ export interface LineData {
   type: LineType;
   realLength?: number;
   calculatedLength?: number;
+  confidence?: number;
+  reasoning?: string;
   coords: { x1: number; y1: number; x2: number; y2: number };
 }
 
 export interface AnalysisResult {
-  lines: { id: string; calculatedLength: number; confidence: number }[];
+  lines: { 
+    id: string; 
+    calculatedLength: number; 
+    confidence: number; 
+    reasoning: string;
+  }[];
   summary: string;
+  perspectiveAnalysis?: string;
 }
