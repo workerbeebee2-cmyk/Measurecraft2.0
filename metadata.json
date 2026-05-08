@@ -1,0 +1,6 @@
+{
+  "name": "AeroMeasure AI",
+  "description": "Precision equipment measurement tool using AI to calculate dimensions from images with perspective and depth analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
