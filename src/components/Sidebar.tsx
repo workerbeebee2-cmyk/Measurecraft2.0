@@ -1,7 +1,7 @@
 import React from 'react';
 import { LineData, LineType } from '../types';
 import { cn } from '../lib/utils';
-import { Trash2, Ruler, Plus, Send, Info, Target, ChevronRight } from 'lucide-react';
+import { Trash2, Ruler, Plus, Send, Info, Target, ChevronRight, X, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SidebarProps {
@@ -15,6 +15,8 @@ interface SidebarProps {
   onSelectLine: (id: string | null) => void;
   activeTab: 'draw' | 'results';
   setActiveTab: (tab: 'draw' | 'results') => void;
+  onClose?: () => void;
+  isDrawingMode?: boolean;
 }
 
 export default function Sidebar({
@@ -27,17 +29,24 @@ export default function Sidebar({
   activeLineId,
   onSelectLine,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  onClose,
+  isDrawingMode
 }: SidebarProps) {
   const lineCategories = [
     'Height', 'Length', 'Width', 'Span', 'Diagonals', 'Interior', 'Cockpit', 'Landing Gear', 'Other'
   ];
 
   return (
-    <div className="w-96 h-screen bg-zinc-950 border-l border-zinc-800 flex flex-col overflow-hidden">
+    <div className="w-full md:w-96 h-full md:h-screen bg-zinc-950 border-l border-zinc-800 flex flex-col overflow-hidden">
       <div className="p-6 border-b border-zinc-800 bg-zinc-900/10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-linear-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center text-zinc-950">
+          <div className="md:hidden">
+            <button onClick={onClose} className="p-2 -ml-2 text-zinc-500 hover:text-white">
+              <X size={20} />
+            </button>
+          </div>
+          <div className="w-9 h-9 bg-linear-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center text-zinc-950 shrink-0">
             <Ruler size={20} />
           </div>
           <div>
@@ -102,10 +111,27 @@ export default function Sidebar({
           </div>
           <button
             onClick={onAddLine}
-            className="w-full py-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-green-500/30 text-zinc-400 hover:text-green-500 flex items-center justify-center gap-3 transition-all group font-bold text-xs uppercase tracking-widest"
+            disabled={isDrawingMode}
+            className={cn(
+              "w-full py-4 rounded-xl border transition-all group font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-3",
+              isDrawingMode 
+                ? "bg-green-500/10 border-green-500/50 text-green-500" 
+                : "bg-zinc-900 border-zinc-800 hover:border-green-500/30 text-zinc-400 hover:text-green-500"
+            )}
           >
-            <Plus size={18} className="group-hover:rotate-90 transition-transform" />
-            Create Measurement
+            {isDrawingMode ? (
+              <>
+                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1 }}>
+                   <div className="w-2 h-2 rounded-full bg-green-500" />
+                </motion.div>
+                Drawing Mode Active...
+              </>
+            ) : (
+              <>
+                <Plus size={18} className="group-hover:rotate-90 transition-transform" />
+                Create Measurement
+              </>
+            )}
           </button>
         </section>
 
@@ -190,14 +216,14 @@ export default function Sidebar({
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               >
-                <Target size={18} />
+                <Cpu size={18} />
               </motion.div>
-              Computing Spatial Data
+              Running Neural Engine
             </>
           ) : (
             <>
               <Send size={18} />
-              Analyze Imagery
+              Compute Neural Data
             </>
           )}
         </button>

@@ -8,13 +8,27 @@ interface ImageCanvasProps {
   onLinesChange: (lines: LineData[]) => void;
   activeLineId: string | null;
   onSelectLine: (id: string | null) => void;
+  isDrawingMode?: boolean;
+  onFinishDrawing?: (coords: { x1: number; y1: number; x2: number; y2: number }) => void;
+  onCancelDrawing?: () => void;
 }
 
-export default function ImageCanvas({ image, lines, onLinesChange, activeLineId, onSelectLine }: ImageCanvasProps) {
+export default function ImageCanvas({ 
+  image, 
+  lines, 
+  onLinesChange, 
+  activeLineId, 
+  onSelectLine,
+  isDrawingMode,
+  onFinishDrawing,
+  onCancelDrawing
+}: ImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const linesRef = useRef<LineData[]>(lines);
+  const isDrawingInternal = useRef(false);
+  const tempLine = useRef<Line | null>(null);
 
   // Keep ref in sync for event handlers
   useEffect(() => {
@@ -27,10 +41,70 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     fabricCanvas.current = new Canvas(canvasRef.current, {
       width: 800,
       height: 600,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: '#0a0a0a',
+      selection: true
     });
 
     const canvas = fabricCanvas.current;
+
+    // Set interaction mode
+    canvas.selection = !isDrawingMode;
+    canvas.defaultCursor = isDrawingMode ? 'crosshair' : 'default';
+    canvas.getObjects().forEach(obj => {
+      if (obj instanceof Line) {
+        obj.selectable = !isDrawingMode;
+        obj.evented = !isDrawingMode;
+      }
+    });
+
+    canvas.on('mouse:down', (options) => {
+      if (isDrawingMode && !isDrawingInternal.current) {
+        const pointer = canvas.getPointer(options.e);
+        isDrawingInternal.current = true;
+        
+        const coords: [number, number, number, number] = [pointer.x, pointer.y, pointer.x, pointer.y];
+        tempLine.current = new Line(coords, {
+          stroke: linesRef.current.length === 0 ? '#22c55e' : '#3b82f6',
+          strokeWidth: 2,
+          selectable: false,
+          evented: false,
+          strokeUniform: true
+        });
+        canvas.add(tempLine.current);
+      }
+    });
+
+    canvas.on('mouse:move', (options) => {
+      if (isDrawingInternal.current && tempLine.current) {
+        const pointer = canvas.getPointer(options.e);
+        tempLine.current.set({ x2: pointer.x, y2: pointer.y });
+        canvas.renderAll();
+      }
+    });
+
+    canvas.on('mouse:up', () => {
+      if (isDrawingInternal.current && tempLine.current) {
+        const line = tempLine.current;
+        const coords = { 
+          x1: line.x1! / canvas.width!, 
+          y1: line.y1! / canvas.height!, 
+          x2: line.x2! / canvas.width!, 
+          y2: line.y2! / canvas.height! 
+        };
+        
+        // Only add if not just a click
+        const length = Math.hypot(line.x2! - line.x1!, line.y2! - line.y1!);
+        if (length > 5) {
+          onFinishDrawing?.(coords);
+        } else {
+          onCancelDrawing?.();
+        }
+
+        canvas.remove(line);
+        tempLine.current = null;
+        isDrawingInternal.current = false;
+      }
+    });
 
     canvas.on('selection:created', (e) => {
       const activeObject = e.selected?.[0] as any;
@@ -47,14 +121,15 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     });
 
     canvas.on('selection:cleared', () => {
-      onSelectLine(null);
+      if (!isDrawingInternal.current) {
+        onSelectLine(null);
+      }
     });
 
     canvas.on('object:moving', (e) => {
       const obj = e.target;
       if (!obj) return;
-
-      // Keep object within canvas bounds
+      
       const bounds = obj.getBoundingRect();
       if (bounds.left < 0) obj.set('left', 0 + (obj.left - bounds.left));
       if (bounds.top < 0) obj.set('top', 0 + (obj.top - bounds.top));
@@ -67,15 +142,18 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
       if (obj && obj instanceof Line && (obj as any).data?.id) {
         const lineId = (obj as any).data.id;
         
-        // Calculate the absolute coordinates of the endpoints
         const matrix = obj.calcTransformMatrix();
         const p1 = util.transformPoint(new Point(obj.x1!, obj.y1!), matrix);
         const p2 = util.transformPoint(new Point(obj.x2!, obj.y2!), matrix);
         
-        // Use functional state update to avoid stale closure issues
         onLinesChange(linesRef.current.map(l => l.id === lineId ? { 
           ...l, 
-          coords: { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y } 
+          coords: { 
+            x1: p1.x / canvas.width!, 
+            y1: p1.y / canvas.height!, 
+            x2: p2.x / canvas.width!, 
+            y2: p2.y / canvas.height! 
+          } 
         } : l));
       }
     });
@@ -83,45 +161,63 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     return () => {
       canvas.dispose();
     };
-  }, []);
+  }, [isDrawingMode]);
 
   useEffect(() => {
+    if (!containerRef.current || !fabricCanvas.current) return;
+    
+    let resizeTimer: any;
+    const resizeObserver = new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (image) loadImage();
+      }, 100);
+    });
+    
+    resizeObserver.observe(containerRef.current);
+    return () => {
+      resizeObserver.disconnect();
+      clearTimeout(resizeTimer);
+    };
+  }, [image]);
+
+  const loadImage = async () => {
     if (!fabricCanvas.current || !image) return;
     const canvas = fabricCanvas.current;
 
-    const loadImage = async () => {
-      try {
-        const img = await FabricImage.fromURL(image);
-        canvas.clear();
-        
-        // Calculate scale to fit container
-        const containerWidth = containerRef.current?.clientWidth || 800;
-        const containerHeight = containerRef.current?.clientHeight || 600;
-        
-        const scale = Math.min(containerWidth / img.width!, containerHeight / img.height!);
-        
-        img.set({
-          selectable: false,
-          evented: false,
-          scaleX: scale,
-          scaleY: scale,
-        });
+    try {
+      const img = await FabricImage.fromURL(image);
+      canvas.clear();
+      
+      // Calculate scale to fit container
+      const containerWidth = containerRef.current?.clientWidth || 800;
+      const containerHeight = containerRef.current?.clientHeight || 600;
+      
+      const scale = Math.min(containerWidth / img.width!, containerHeight / img.height!);
+      
+      img.set({
+        selectable: false,
+        evented: false,
+        scaleX: scale,
+        scaleY: scale,
+      });
 
-        canvas.setDimensions({
-          width: img.width! * scale,
-          height: img.height! * scale
-        });
-        canvas.add(img);
-        canvas.centerObject(img);
-        canvas.renderAll();
+      canvas.setDimensions({
+        width: img.width! * scale,
+        height: img.height! * scale
+      });
+      canvas.add(img);
+      canvas.centerObject(img);
+      canvas.renderAll();
 
-        // Redraw lines
-        syncLinesToCanvas();
-      } catch (err) {
-        console.error("Failed to load image into fabric:", err);
-      }
-    };
+      // Redraw lines
+      syncLinesToCanvas();
+    } catch (err) {
+      console.error("Failed to load image into fabric:", err);
+    }
+  };
 
+  useEffect(() => {
     loadImage();
   }, [image]);
 
@@ -142,7 +238,12 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     });
 
     lines.forEach(line => {
-      const fabricLine = new Line([line.coords.x1, line.coords.y1, line.coords.x2, line.coords.y2], {
+      const x1 = line.coords.x1 * canvas.width!;
+      const y1 = line.coords.y1 * canvas.height!;
+      const x2 = line.coords.x2 * canvas.width!;
+      const y2 = line.coords.y2 * canvas.height!;
+
+      const fabricLine = new Line([x1, y1, x2, y2], {
         stroke: line.color,
         strokeWidth: activeLineId === line.id ? 4 : 2,
         selectable: true,
@@ -152,13 +253,14 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
         cornerColor: 'white',
         cornerStrokeColor: line.color,
         cornerSize: 8,
-        data: { id: line.id }
+        data: { id: line.id },
+        strokeUniform: true
       });
 
       // Add label
       const text = new FabricText(line.name, {
-        left: (line.coords.x1 + line.coords.x2) / 2,
-        top: (line.coords.y1 + line.coords.y2) / 2 - 20,
+        left: (x1 + x2) / 2,
+        top: (y1 + y2) / 2 - 20,
         fontSize: 14,
         fill: line.color,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -184,7 +286,7 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[600px] flex items-center justify-center bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl relative">
+    <div ref={containerRef} className="w-full h-full min-h-[400px] md:min-h-[600px] flex items-center justify-center bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl relative">
       <canvas ref={canvasRef} id="measurement-canvas" />
       {!image && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 gap-4">

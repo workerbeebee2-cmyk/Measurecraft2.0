@@ -7,19 +7,18 @@ import React, { useState, useCallback } from 'react';
 import ImageCanvas from './components/ImageCanvas';
 import Sidebar from './components/Sidebar';
 import { LineData, LineType, AnalysisResult } from './types';
-import { analyzeImageMeasurements } from './services/geminiService';
-import { Upload, X, AlertCircle, CheckCircle2, Zap, LayoutGrid, Terminal } from 'lucide-react';
+import { analyzeNeuralSpatial } from './services/spatialEngine';
+import { Upload, X, AlertCircle, CheckCircle2, Zap, LayoutGrid, Terminal, Menu, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 
 const ANALYSIS_STEPS = [
-  "Detecting image perspective & vanishing points...",
-  "Estimating camera focal length & orientation...",
-  "Applying projective geometry correction...",
-  "Calibrating pixel-per-unit ratio from reference...",
-  "Computing depth-corrected distances...",
-  "Analyzing foreshortening & parallax vectors...",
-  "Finalizing high-precision measurements..."
+  "Initializing Projective Neural Mesh...",
+  "Calibrating Scale Vectors...",
+  "Computing Z-Depth Fore-shortening...",
+  "Applying Parallax Neural Logic...",
+  "Normalizing Perspective Matrix...",
+  "Finalizing Neural Geometry Computation..."
 ];
 
 export default function App() {
@@ -31,6 +30,8 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<'draw' | 'results'>('draw');
   const [analysisLog, setAnalysisLog] = useState<string[]>([]);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,6 +50,11 @@ export default function App() {
   };
 
   const addLine = () => {
+    setIsDrawingMode(true);
+    setError(null);
+  };
+
+  const handleFinishDrawing = (coords: { x1: number; y1: number; x2: number; y2: number }) => {
     const isFirst = lines.length === 0;
     const newLine: LineData = {
       id: Math.random().toString(36).substr(2, 9),
@@ -56,10 +62,11 @@ export default function App() {
       category: isFirst ? 'Other' : 'Length',
       color: isFirst ? '#22c55e' : getRandomColor(),
       type: isFirst ? LineType.REFERENCE : LineType.TARGET,
-      coords: { x1: 100, y1: 100, x2: 300, y2: 100 },
+      coords,
     };
     setLines([...lines, newLine]);
     setActiveLineId(newLine.id);
+    setIsDrawingMode(false);
   };
 
   const deleteLine = (id: string) => {
@@ -87,12 +94,12 @@ export default function App() {
 
     // Simulate analysis steps visually
     for (const step of ANALYSIS_STEPS) {
-       setAnalysisLog(prev => [...prev, `[PROCESS] ${step}`]);
-       await new Promise(r => setTimeout(r, 600));
+       setAnalysisLog(prev => [...prev, `[CORE] ${step}`]);
+       await new Promise(r => setTimeout(r, 400));
     }
 
     try {
-      const result = await analyzeImageMeasurements(image, lines);
+      const result = await analyzeNeuralSpatial(lines);
       
       const updatedLines = lines.map(line => {
         const lineResult = result.lines.find((r: any) => r.id === line.id);
@@ -109,7 +116,7 @@ export default function App() {
 
       setLines(updatedLines);
       setAnalysisResult(result);
-      setAnalysisLog(prev => [...prev, `[SUCCESS] Spatial analysis completed with high confidence.`]);
+      setAnalysisLog(prev => [...prev, `[SUCCESS] ${result.summary}`]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
       setAnalysisLog(prev => [...prev, `[FATAL] ${err instanceof Error ? err.message : "Unknown error"}`]);
@@ -119,13 +126,19 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-zinc-950 font-sans antialiased text-zinc-100 overflow-hidden">
-      <div className="flex-1 flex flex-col relative">
+    <div className="flex flex-col md:flex-row h-screen bg-zinc-950 font-sans antialiased text-zinc-100 overflow-hidden relative">
+      <div className="flex-1 flex flex-col relative h-full">
         <header className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/50 backdrop-blur-md z-10 shrink-0">
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-lg hover:border-zinc-700 transition-colors group">
+          <div className="flex items-center gap-2 md:gap-4">
+            <button 
+              onClick={() => setIsSidebarVisible(true)}
+              className="md:hidden p-2 text-zinc-400 hover:text-white"
+            >
+              <Menu size={20} />
+            </button>
+            <label className="flex items-center gap-2 cursor-pointer bg-zinc-900 border border-zinc-800 px-3 md:px-4 py-2 rounded-lg hover:border-zinc-700 transition-colors group">
               <Upload size={16} className="text-blue-500 group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] uppercase font-bold tracking-wider">Load Dataset</span>
+              <span className="text-[10px] md:text-[11px] uppercase font-bold tracking-wider">Load Data</span>
               <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*" />
             </label>
             {image && (
@@ -140,10 +153,10 @@ export default function App() {
           
           <div className="flex items-center gap-6">
              <div className="flex flex-col items-end">
-                <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-[0.2em] mb-0.5">Engine Status</div>
+                <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-[0.2em] mb-0.5">Neural Status</div>
                 <div className="flex items-center gap-1.5">
-                   <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-                   <span className="text-[10px] font-mono text-zinc-400">GEMINI-3.1-PRO ACTIVE</span>
+                   <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)] animate-pulse" />
+                   <span className="text-[10px] font-mono text-zinc-400">GEOMETRY-V2 READY</span>
                 </div>
              </div>
           </div>
@@ -165,6 +178,9 @@ export default function App() {
                   onLinesChange={setLines}
                   activeLineId={activeLineId}
                   onSelectLine={setActiveLineId}
+                  isDrawingMode={isDrawingMode}
+                  onFinishDrawing={handleFinishDrawing}
+                  onCancelDrawing={() => setIsDrawingMode(false)}
                 />
               </motion.div>
             ) : (
@@ -274,18 +290,43 @@ export default function App() {
         </main>
       </div>
 
-      <Sidebar
-        lines={lines}
-        onAddLine={addLine}
-        onDeleteLine={deleteLine}
-        onUpdateLine={updateLine}
-        onAnalyze={handleAnalyze}
-        isAnalyzing={isAnalyzing}
-        activeLineId={activeLineId}
-        onSelectLine={setActiveLineId}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
+      {/* Sidebar with Mobile Support */}
+      <div className={cn(
+        "fixed inset-0 z-50 md:relative md:inset-auto md:z-auto transition-transform duration-300 ease-in-out transform",
+        isSidebarVisible ? "translate-x-0" : "translate-x-full md:translate-x-0"
+      )}>
+        {/* Mobile Overlay */}
+        <div 
+          className={cn(
+            "absolute inset-0 bg-black/60 md:hidden transition-opacity duration-300",
+            isSidebarVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+          onClick={() => setIsSidebarVisible(false)}
+        />
+        
+        <div className="relative h-full flex flex-row-reverse md:flex-row">
+          <Sidebar
+            lines={lines}
+            onAddLine={addLine}
+            onDeleteLine={deleteLine}
+            onUpdateLine={updateLine}
+            onAnalyze={() => {
+              handleAnalyze();
+              if (window.innerWidth < 768) setIsSidebarVisible(false);
+            }}
+            isAnalyzing={isAnalyzing}
+            activeLineId={activeLineId}
+            onSelectLine={(id) => {
+              setActiveLineId(id);
+              if (id && window.innerWidth < 768) setIsSidebarVisible(false);
+            }}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onClose={() => setIsSidebarVisible(false)}
+            isDrawingMode={isDrawingMode}
+          />
+        </div>
+      </div>
     </div>
   );
 }
