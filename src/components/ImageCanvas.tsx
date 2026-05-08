@@ -14,6 +14,12 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const linesRef = useRef<LineData[]>(lines);
+
+  // Keep ref in sync for event handlers
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -44,16 +50,30 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
       onSelectLine(null);
     });
 
+    canvas.on('object:moving', (e) => {
+      const obj = e.target;
+      if (!obj) return;
+
+      // Keep object within canvas bounds
+      const bounds = obj.getBoundingRect();
+      if (bounds.left < 0) obj.set('left', 0 + (obj.left - bounds.left));
+      if (bounds.top < 0) obj.set('top', 0 + (obj.top - bounds.top));
+      if (bounds.left + bounds.width > canvas.width!) obj.set('left', canvas.width! - bounds.width + (obj.left - bounds.left));
+      if (bounds.top + bounds.height > canvas.height!) obj.set('top', canvas.height! - bounds.height + (obj.top - bounds.top));
+    });
+
     canvas.on('object:modified', (e) => {
       const obj = e.target;
       if (obj && obj instanceof Line && (obj as any).data?.id) {
         const lineId = (obj as any).data.id;
-        // Calculate the absolute coordinates of the endpoints after transformations
+        
+        // Calculate the absolute coordinates of the endpoints
         const matrix = obj.calcTransformMatrix();
         const p1 = util.transformPoint(new Point(obj.x1!, obj.y1!), matrix);
         const p2 = util.transformPoint(new Point(obj.x2!, obj.y2!), matrix);
         
-        onLinesChange(lines.map(l => l.id === lineId ? { 
+        // Use functional state update to avoid stale closure issues
+        onLinesChange(linesRef.current.map(l => l.id === lineId ? { 
           ...l, 
           coords: { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y } 
         } : l));
@@ -128,6 +148,10 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
         selectable: true,
         hasControls: true,
         hasBorders: true,
+        transparentCorners: false,
+        cornerColor: 'white',
+        cornerStrokeColor: line.color,
+        cornerSize: 8,
         data: { id: line.id }
       });
 
