@@ -1,12 +1,24 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { LineData } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    const key = process.env.GEMINI_API_KEY || "";
+    if (!key) {
+      console.warn("GEMINI_API_KEY is not defined. Analysis features will be disabled.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return aiInstance;
+}
 
 export async function analyzeImageMeasurements(
   imageDataUri: string,
   lines: LineData[]
 ) {
+  const ai = getAI();
   const base64Data = imageDataUri.split(",")[1];
   const mimeType = imageDataUri.split(",")[0].split(":")[1].split(";")[0];
 

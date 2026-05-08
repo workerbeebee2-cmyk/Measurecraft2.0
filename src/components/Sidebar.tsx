@@ -39,7 +39,7 @@ export default function Sidebar({
 
   return (
     <div className="w-96 h-screen bg-zinc-950 border-l border-zinc-800 flex flex-col overflow-hidden">
-      <div className="p-6 border-bottom border-zinc-800">
+      <div className="p-6 border-b border-zinc-800">
         <h2 className="text-xl font-semibold text-white flex items-center gap-2">
           <Ruler className="text-green-500" />
           AeroMeasure Tool

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import * as fabric from 'fabric';
+import { Canvas, FabricImage, Line, FabricText, Point, util } from 'fabric';
 import { LineData, LineType } from '../types';
 
 interface ImageCanvasProps {
@@ -12,13 +12,13 @@ interface ImageCanvasProps {
 
 export default function ImageCanvas({ image, lines, onLinesChange, activeLineId, onSelectLine }: ImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvas = useRef<fabric.Canvas | null>(null);
+  const fabricCanvas = useRef<Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    fabricCanvas.current = new fabric.Canvas(canvasRef.current, {
+    fabricCanvas.current = new Canvas(canvasRef.current, {
       width: 800,
       height: 600,
       backgroundColor: '#1a1a1a',
@@ -46,12 +46,12 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
 
     canvas.on('object:modified', (e) => {
       const obj = e.target;
-      if (obj && obj instanceof fabric.Line && (obj as any).data?.id) {
+      if (obj && obj instanceof Line && (obj as any).data?.id) {
         const lineId = (obj as any).data.id;
         // Calculate the absolute coordinates of the endpoints after transformations
         const matrix = obj.calcTransformMatrix();
-        const p1 = fabric.util.transformPoint(new fabric.Point(obj.x1!, obj.y1!), matrix);
-        const p2 = fabric.util.transformPoint(new fabric.Point(obj.x2!, obj.y2!), matrix);
+        const p1 = util.transformPoint(new Point(obj.x1!, obj.y1!), matrix);
+        const p2 = util.transformPoint(new Point(obj.x2!, obj.y2!), matrix);
         
         onLinesChange(lines.map(l => l.id === lineId ? { 
           ...l, 
@@ -70,32 +70,36 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     const canvas = fabricCanvas.current;
 
     const loadImage = async () => {
-      const img = await fabric.FabricImage.fromURL(image);
-      canvas.clear();
-      
-      // Calculate scale to fit container
-      const containerWidth = containerRef.current?.clientWidth || 800;
-      const containerHeight = containerRef.current?.clientHeight || 600;
-      
-      const scale = Math.min(containerWidth / img.width!, containerHeight / img.height!);
-      
-      img.set({
-        selectable: false,
-        evented: false,
-        scaleX: scale,
-        scaleY: scale,
-      });
+      try {
+        const img = await FabricImage.fromURL(image);
+        canvas.clear();
+        
+        // Calculate scale to fit container
+        const containerWidth = containerRef.current?.clientWidth || 800;
+        const containerHeight = containerRef.current?.clientHeight || 600;
+        
+        const scale = Math.min(containerWidth / img.width!, containerHeight / img.height!);
+        
+        img.set({
+          selectable: false,
+          evented: false,
+          scaleX: scale,
+          scaleY: scale,
+        });
 
-      canvas.setDimensions({
-        width: img.width! * scale,
-        height: img.height! * scale
-      });
-      canvas.add(img);
-      canvas.centerObject(img);
-      canvas.renderAll();
+        canvas.setDimensions({
+          width: img.width! * scale,
+          height: img.height! * scale
+        });
+        canvas.add(img);
+        canvas.centerObject(img);
+        canvas.renderAll();
 
-      // Redraw lines
-      syncLinesToCanvas();
+        // Redraw lines
+        syncLinesToCanvas();
+      } catch (err) {
+        console.error("Failed to load image into fabric:", err);
+      }
     };
 
     loadImage();
@@ -112,14 +116,13 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
     // Remove existing line objects except the background image
     const objects = canvas.getObjects();
     objects.forEach(obj => {
-      // In v6+, 'type' is a property but classes are preferred for instance checks
-      if (obj instanceof fabric.Line || obj instanceof fabric.FabricText) {
+      if (obj instanceof Line || obj instanceof FabricText) {
         canvas.remove(obj);
       }
     });
 
     lines.forEach(line => {
-      const fabricLine = new fabric.Line([line.coords.x1, line.coords.y1, line.coords.x2, line.coords.y2], {
+      const fabricLine = new Line([line.coords.x1, line.coords.y1, line.coords.x2, line.coords.y2], {
         stroke: line.color,
         strokeWidth: activeLineId === line.id ? 4 : 2,
         selectable: true,
@@ -129,7 +132,7 @@ export default function ImageCanvas({ image, lines, onLinesChange, activeLineId,
       });
 
       // Add label
-      const text = new fabric.FabricText(line.name, {
+      const text = new FabricText(line.name, {
         left: (line.coords.x1 + line.coords.x2) / 2,
         top: (line.coords.y1 + line.coords.y2) / 2 - 20,
         fontSize: 14,
